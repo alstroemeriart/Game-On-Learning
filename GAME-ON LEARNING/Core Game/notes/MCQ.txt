@@ -1,0 +1,60 @@
+{"question": "Which symbol in a flowchart represents a decision point?", "options": ["Rectangle", "Diamond", "Oval", "Arrow"], "answer": "Diamond"}
+{"question": "Which stage of problem solving creates the strategy for solving the task?", "options": ["Analyze", "Plan", "Implement", "Maintenance"], "answer": "Plan"}
+{"question": "Which language level is closest to human language and easier to read?", "options": ["Machine language", "Assembly", "High-level language", "Binary"], "answer": "High-level language"}
+{"question": "Which Python function gathers input from the user?", "options": ["print()", "scan()", "input()", "read()"], "answer": "input()"}
+{"question": "Which Python function is used to display output?", "options": ["echo()", "display()", "print()", "show()"], "answer": "print()"}
+{"question": "Which data type would store the value 3.14?", "options": ["int", "float", "str", "bool"], "answer": "float"}
+{"question": "Which operator performs exponentiation in Python?", "options": ["^", "", "", "//"], "answer": ""}
+{"question": "Which operator checks equality between two values?", "options": ["=", "==", "!=", "<>"], "answer": "=="}
+{"question": "Which operator combines two conditions that must both be true?", "options": ["or", "not", "and", "xor"], "answer": "and"}
+{"question": "Which keyword is used for multi-branch decisions in Python?", "options": ["switch", "elif", "case", "loop"], "answer": "elif"}
+{"question": "Which loop checks its condition before each iteration?", "options": ["while loop", "do-while loop", "repeat-until loop", "foreach loop"], "answer": "while loop"}
+{"question": "Which loop automatically iterates through elements of a container?", "options": ["while", "for", "switch", "if"], "answer": "for"}
+{"question": "Which function converts a string into an integer?", "options": ["str()", "float()", "int()", "len()"], "answer": "int()"}
+{"question": "Which method joins strings sequentially?", "options": ["Subtraction", "Concatenation", "Division", "Casting"], "answer": "Concatenation"}
+{"question": "Which operator repeats a string multiple times?", "options": ["+", "", "%", "//"], "answer": ""}
+{"question": "Which style guide provides Python coding conventions?", "options": ["ISO", "HTML5", "PEP 8", "ANSI C"], "answer": "PEP 8"}
+{"question": "Which comment symbol makes the interpreter ignore the rest of the line?", "options": ["//", "/", "#", "--"], "answer": "#"}
+{"question": "Which type conversion happens automatically without programmer intervention?", "options": ["Explicit", "Manual", "Implicit", "Forced"], "answer": "Implicit"}
+{"question": "Which function formats numbers like rounding decimals in output?", "options": ["round()", "format()", "str()", "len()"], "answer": "format()"}
+{"question": "Which structure runs code only if a condition is true?", "options": ["loop", "if statement", "function", "class"], "answer": "if statement"}
+{"question": "Which structure provides two alternative code paths?", "options": ["if", "while", "if-else", "for"], "answer": "if-else"}
+{"question": "Which operator gives the remainder after division?", "options": ["/", "%", "//", "**"], "answer": "%"}
+{"question": "Which division operator returns a float result?", "options": ["//", "%", "/", ""], "answer": "/"}
+{"question": "Which structure executes multiple statements for reuse?", "options": ["loop", "function", "comment", "variable"], "answer": "function"}
+{"question": "Which naming style uses lowercase words separated by underscores?", "options": ["camelCase", "PascalCase", "snake_case", "UPPERCASE"], "answer": "snake_case"}
+{"question": "Which container can a for loop iterate through?", "options": ["Range", "String", "List", "All of the above"], "answer": "All of the above"}
+{"question": "Which operator is used for multiplication?", "options": ["x", "", ".", "%"], "answer": "*"}
+{"question": "Which keyword reverses a Boolean condition?", "options": ["not", "and", "or", "elif"], "answer": "not"}
+{"question": "Which component stores a value in memory?", "options": ["Operator", "Variable", "Loop", "Comment"], "answer": "Variable"}
+{"question": "Which feature improves readability by explaining the code purpose?", "options": ["Operators", "Comments", "Loops", "Variables"], "answer": "Comments"}
+{"question": "Which operator combines two conditions that must both be true?", "options": ["or", "not", "and", "xor"], "answer": "and"} 
+{"question": "Which flowchart symbol is used for a decision point?", "options": ["Rectangle", "Diamond", "Parallelogram", "Circle"], "answer": "Diamond"} 
+{"question": "What is the result of 7 // 4 in Python?", "options": ["1.75", "1", "3", "2"], "answer": "1"} 
+{"question": "Which part of APCIM involves understanding the problem?", "options": ["Plan", "Analyze", "Implement", "Check"], "answer": "Analyze"} 
+{"question": "Which operator is used for finding the remainder?", "options": ["/", "//", "%", "**"], "answer": "%"} 
+{"question": "Which function is used to add an item to the end of a list?", "options": ["insert()", "add()", "append()", "extend()"], "answer": "append()"} 
+{"question": "What does PEP stand for?", "options": ["Python Error Protocol", "Python Enhancement Proposal", "Programming Essential Plan", "Primary Element Process"], "answer": "Python Enhancement Proposal"} 
+{"question": "Which function displays output to the user?", "options": ["input()", "write()", "print()", "display()"], "answer": "print()"} 
+{"question": "Which escape sequence represents a newline?", "options": ["\t", "\n", "\b", "\r"], "answer": "\n"} 
+{"question": "What is the recommended naming convention for Python variables?", "options": ["camelCase", "PascalCase", "snake_case", "kebab-case"], "answer": "snake_case"} 
+{"question": "Which of these is used for multi-line documentation?", "options": ["#", "//", "''' or """", "/* */"], "answer": "''' or """"} 
+{"question": "Which structure is best for checking multiple specific conditions with no default action?", "options": ["if", "if-else", "if-elif", "if-elif-else"], "answer": "if-elif"} 
+{"question": "What method returns all key-value pairs in a dictionary?", "options": ["keys()", "values()", "items()", "all()"], "answer": "items()"} 
+{"question": "Which operator is used for exponentiation?", "options": ["^", "", "*", "exp"], "answer": ""} 
+{"question": "What is the term for a function calling itself?", "options": ["Iteration", "Recursion", "Looping", "Nesting"], "answer": "Recursion"} 
+{"question": "Which symbol represents input/output in a flowchart?", "options": ["Oval", "Rectangle", "Parallelogram", "Hexagon"], "answer": "Parallelogram"} 
+{"question": "In range(start, end, step), which value is exclusive?", "options": ["start", "end", "step", "none"], "answer": "end"} 
+{"question": "Which variable type persists throughout the whole execution?", "options": ["Dynamic", "Static", "Global", "Local"], "answer": "Static"} 
+{"question": "Which operator checks for inequality?", "options": ["==", "=", "!=", "<>"], "answer": "!="} 
+{"question": "What type of string allows curly braces for replacement fields?", "options": ["r-string", "f-string", "b-string", "s-string"], "answer": "f-string"} 
+{"question": "Which function converts a value to a whole number?", "options": ["float()", "str()", "int()", "abs()"], "answer": "int()"} 
+{"question": "What is the first step in the APCIM problem-solving process?", "options": ["Plan", "Analyze", "Implement", "Check"], "answer": "Analyze"} 
+{"question": "Which loop runs at least once before checking the condition?", "options": ["While Loop", "For Loop", "Do-While Loop", "Infinite Loop"], "answer": "Do-While Loop"} 
+{"question": "Which symbol is the 'Preparation' symbol in a flowchart?", "options": ["Circle", "Hexagon", "Diamond", "Pill"], "answer": "Hexagon"} 
+{"question": "Which collection type uses curly braces and key-value pairs?", "options": ["List", "Tuple", "Dictionary", "Set"], "answer": "Dictionary"} 
+{"question": "What does len([1, 2, 3]) return?", "options": ["1", "2", "3", "0"], "answer": "3"} 
+{"question": "Which operator reverses a boolean condition?", "options": ["and", "or", "not", "xor"], "answer": "not"} 
+{"question": "What is the result of 'Python' * 2?", "options": ["Python2", "PythonPython", "Error", "2Python"], "answer": "PythonPython"} 
+{"question": "Which collection type is defined by parentheses?", "options": ["List", "Dictionary", "Tuple", "Set"], "answer": "Tuple"} 
+{"question": "Which flowchart symbol connects separate paths on the same page?", "options": ["Arrow", "Circle", "Diamond", "Oval"], "answer": "Circle"}
