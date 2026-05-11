@@ -1,0 +1,67 @@
+{
+  "Squid": {
+    "kills": 3,
+    "first_seen": "2026-04-21",
+    "last_seen": "2026-04-21"
+  },
+  "Void Reaper": {
+    "kills": 4,
+    "first_seen": "2026-04-21",
+    "last_seen": "2026-04-21"
+  },
+  "Bandit": {
+    "kills": 1,
+    "first_seen": "2026-04-21",
+    "last_seen": "2026-04-21"
+  },
+  "Cursed Knight": {
+    "kills": 1,
+    "first_seen": "2026-04-21",
+    "last_seen": "2026-04-21"
+  },
+  "Orc Brute": {
+    "kills": 3,
+    "first_seen": "2026-04-21",
+    "last_seen": "2026-04-21"
+  },
+  "Stone Golem": {
+    "kills": 2,
+    "first_seen": "2026-04-21",
+    "last_seen": "2026-04-21"
+  },
+  "Shadow Sprite": {
+    "kills": 2,
+    "first_seen": "2026-04-21",
+    "last_seen": "2026-04-21"
+  },
+  "Dark Mage": {
+    "kills": 3,
+    "first_seen": "2026-04-21",
+    "last_seen": "2026-04-21"
+  },
+  "Phantom Assassin": {
+    "kills": 3,
+    "first_seen": "2026-04-21",
+    "last_seen": "2026-04-21"
+  },
+  "Executioner": {
+    "kills": 1,
+    "first_seen": "2026-04-21",
+    "last_seen": "2026-04-21"
+  },
+  "Wild Rat": {
+    "kills": 2,
+    "first_seen": "2026-04-21",
+    "last_seen": "2026-04-21"
+  },
+  "Goblin": {
+    "kills": 1,
+    "first_seen": "2026-04-21",
+    "last_seen": "2026-04-21"
+  },
+  "Ancient Guardian": {
+    "kills": 2,
+    "first_seen": "2026-04-21",
+    "last_seen": "2026-04-21"
+  }
+}

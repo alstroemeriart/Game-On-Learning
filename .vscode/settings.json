@@ -1,0 +1,17 @@
+{
+  "python.analysis.extraPaths": [
+    "./Core Game"
+  ],
+  "python.analysis.exclude": [
+    "**/__pycache__",
+    "Core Game/tempCodeRunnerFile.py"
+  ],
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/tempCodeRunnerFile.py": true,
+    "**/*.rpyc": true,
+    "**/*.rpa": true,
+    "**/*.rpymc": true,
+    "**/cache/": true
+  }
+}

@@ -1,0 +1,260 @@
+════════════════════════════════════════════════════════════════
+                     GAME-ON LEARNING
+                  A Knowledge Combat Roguelite
+════════════════════════════════════════════════════════════════
+
+OVERVIEW
+────────
+Game-On Learning is a turn-based RPG roguelite where combat is
+driven entirely by answering questions from your own study notes.
+Instead of grinding levels or memorizing game mechanics, your
+real-world knowledge becomes your weapon. Every correct answer
+deals damage; every wrong answer costs you. The better you know
+your material, the further you go.
+
+The game is designed as a self-study tool disguised as an RPG —
+students load their notes into the game and fight through a
+three-tier dungeon, with the boss waiting at the end.
+
+
+PURPOSE
+───────
+To make reviewing study material engaging by attaching stakes,
+progression, and replayability to the act of answering questions.
+The game rewards consistent correct answers, punishes gaps in
+knowledge, and tracks which topics you struggle with so you know
+exactly what to review after a run.
+
+
+════════════════════════════════════════════════════════════════
+                         FEATURES
+════════════════════════════════════════════════════════════════
+
+QUESTION TYPES
+──────────────
+The game supports six formats, each loaded from a separate notes
+file that the player provides:
+
+  TF  — True / False
+        Statement = True  or  Statement = False
+
+  MC  — Multiple Choice
+        JSON format with question, options array, and answer key
+
+  AR  — Arithmetic / Short Answer
+        Question = Answer  (numeric or single-word)
+
+  ID  — Identification
+        Question = Answer  (short descriptive answer)
+
+  FB  — Fill in the Blank
+        Question with _______ = Answer
+
+  OD  — Ordering
+        JSON format; player arranges shuffled items in the
+        correct sequence by entering index numbers
+
+
+COMBAT SYSTEM
+─────────────
+  • Turn-based: player acts first, then enemy
+  • Action Points (AP): player has 2 AP per turn
+      - Attack   costs 2 AP (direct hit, no question)
+      - Ask      costs 1 AP (answer a question to deal damage)
+      - Aid      costs 1 AP (use an item from inventory)
+      - Abstain  costs 0 AP (attempt to flee with penalties)
+      - Skills   is free    (view unlocked passive abilities)
+
+  Correct answers deal damage scaled by wisdom, mastery, and
+  streak. Wrong answers trigger an enemy counter-attack and
+  halve the current streak.
+
+
+STREAK SYSTEM
+─────────────
+  Consecutive correct answers build a streak counter that:
+    - Increases attack damage (+1% ATK per streak point)
+    - Improves dodge chance   (+0.5% per point, cap 25%)
+    - Gives shop discounts    (-1% per 5 streak, cap 25%)
+  
+  Wrong answers halve the streak. The Streak Guard item or the
+  player's streak_protected flag can absorb one wrong answer
+  without penalty.
+
+
+FOCUS SYSTEM
+────────────
+  The Focus bar fills by 10 + (WIS × 0.2) per correct answer.
+  When it reaches 100, the player can choose one of:
+    1. Massive Strike — double-damage attack
+    2. Heal 20% HP
+    3. Protect Streak — next wrong answer won't halve streak
+
+
+MASTERY SYSTEM
+──────────────
+  Each question type has its own mastery counter. Answering
+  correctly raises mastery by 1. Mastery provides:
+    - Damage bonus: +1.5% per mastery point for that type
+    - Skill unlocks at mastery 5 per tree
+    - Achievement milestones at mastery 20
+
+
+SKILL SYSTEM
+────────────
+  Four passive skills unlock at mastery 5 in their tree:
+
+    Reflex Dodge    (TF tree)  — +10% dodge after correct TF answer
+    Eliminate One   (MC tree)  — remove one wrong MC option per question
+    Bonus Damage    (AR tree)  — +20% damage on correct AR answers
+    Efficient Healing (ID tree) — +20% heal effect on correct ID answers
+
+
+CHARACTER CLASSES
+─────────────────
+  Six classes at character creation, each with a unique passive:
+
+    Berserker  — Bloodlust: each correct answer permanently +1 ATK
+                 (caps at 10 stacks)
+    Duelist    — Momentum: crit chance scales with current streak
+    Sentinel   — Fortress: wrong answers never trigger enemy attacks
+    Arcanist   — Insight: high WIS and CRIT for knowledge-heavy play
+    Gambler    — Luck: random procs on correct answers (gold, hints,
+                 streak bonus, focus, or enemy damage)
+    Custom     — 100 stat points distributed manually by the player
+
+  God Mode is unlockable with code "143" at the name screen for
+  playtesting and auto-play demonstration.
+
+
+RUN MODIFIERS
+─────────────
+  Chosen once per run before it begins:
+
+    Scholar's Burden  — All questions harder; correct answers deal 2× damage
+    Cursed Knowledge  — Wrong answers cost 10 HP in addition to streak loss
+    Iron Will         — Cannot escape any battle; rewards are 50% higher
+    Lucky Start       — Begin with a random rare item and +20 gold
+    No Modifier       — Standard run with no changes
+
+
+MAP / NODE SYSTEM
+─────────────────
+  Each run is a branching path of nodes. The player chooses from
+  2–3 options at each step. Node types:
+
+    [B] Battle  — Standard combat against a scaled enemy
+    [E] Elite   — Three-phase enemy with increasing ATK and DEF;
+                  grants permanent +5 Max HP on victory
+    [S] Shop    — Buy or sell items; prices discounted by streak
+    [M] Maze    — Quiz trial with branching paths, chests, and traps
+    [R] Rest    — Recover 30% of Max HP
+    [!] Boss    — Final encounter; question-gated actions, 3 phases
+    [✦] Trial   — Bonus knowledge trial, unlocked by high mastery
+
+  Difficulty scales every 5 nodes (Tier 1 → 2 → 3).
+  A boss is guaranteed at node 15.
+
+
+ENEMY SYSTEM
+────────────
+  Enemies are drawn from three tier pools (Tier 1–3) plus an Elite
+  pool. Each enemy has a behavior pattern:
+
+    Neutral    — single standard attack
+    Aggressive — two weaker hits per turn
+    Evasive    — 30% chance to boost own dodge instead of attacking
+    Defensive  — 40% chance to raise own defense before attacking
+
+  All enemy stats scale with nodes cleared and current tier to
+  keep combat challenging throughout the run.
+
+
+BOSS COMBAT
+───────────
+  The boss fight differs from standard combat:
+    - Every action (Strike, Evade, Restore, Focus) requires answering
+      a hard (difficulty 3) question first
+    - Boss "tells" hint at the ideal action for a damage/safety bonus
+    - Three phases triggered at 66% and 33% HP with stat escalation
+    - Defeat the boss to win the run
+
+
+ITEMS & SHOP
+────────────
+  Items drop from combat or can be purchased in shop nodes.
+  Rarities: common, uncommon, rare, legendary
+
+  Healing:   Healing Potion, Mega Healing Potion, Revival Stone
+  Buffs:     Attack Boost, Defense Boost, Speed Boost
+  Debuffs:   Poison Bomb, Freeze Scroll, Weakness Curse
+  Utility:   Hint Potion, Double Gold Charm
+
+  The shop also lets the player sell unwanted items for half price.
+  Mystery items sell at a discount but hide their identity until
+  purchased.
+
+
+STATUS EFFECTS
+──────────────
+  Buffs (positive):   Attack Buff, Defense Buff, Speed Buff,
+                      Regeneration, Shield, Gold Boost,
+                      Double Gold, Streak Guard
+
+  Debuffs (negative): Poison, Burn, Stun, Freeze,
+                      Attack Down (AttackDebuff), Vulnerable
+
+
+ACHIEVEMENTS
+────────────
+  Ten persistent achievements tracked across all runs:
+
+    First Blood         — Win your first battle
+    On a Roll           — Reach a streak of 10
+    Unstoppable         — Reach a streak of 25
+    Scholar's Victory   — Defeat the final boss
+    Untouchable         — Win a battle without taking damage
+    True Scholar        — Reach 20 TF mastery
+    Process of Elimination — Reach 20 MC mastery
+    Well Rounded        — Answer all 6 question types correctly in one run
+    Completionist       — Clear 15 nodes in a single run
+    Penny Pincher       — Enter a shop with 0 gold
+
+
+BESTIARY
+────────
+  Tracks every enemy encountered and killed across all runs,
+  including first-seen and last-seen dates. Sorted by kill count
+  for a leaderboard of your most-defeated foes.
+
+
+SAVE SYSTEM
+───────────
+  The game auto-saves after every node. A completed run is
+  archived separately so last-run stats are always viewable
+  from the main menu without overwriting the active save.
+
+
+LEARNING REVIEW
+───────────────
+  At the end of a run the game shows:
+    - Total questions answered, correct vs incorrect
+    - Accuracy percentage
+    - Per-category breakdown with a visual accuracy bar
+    - A list of missed questions for focused review
+    - Weak areas ranked by wrong-answer count
+
+
+INTERFACE
+─────────
+  The game ships with both a full GUI (Tkinter, three-panel
+  layout with animated stat bars, enemy canvas, and branching
+  tree map) and a terminal fallback for systems without a display.
+
+  GUI panels:
+    Left   — Character portrait, HP/Focus/Streak/EXP bars,
+              attribute grid with tooltips
+    Center — Narrative log, action buttons, text input
+    Right  — Enemy stats panel, inventory list
+
+════════════════════════════════════════════════════════════════

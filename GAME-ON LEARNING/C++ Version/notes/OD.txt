@@ -1,0 +1,30 @@
+{"type":"OD","question":"Order the APCIM steps from start to finish", "items":["Maintenance","Analyze","Check","Plan","Implement"],"answer":"2,4,3,5,1"} 
+{"type":"OD","question":"Order these languages from lowest to highest level", "items":["High-level Language","Machine Code","Assembly/Low-level"],"answer":"2,3,1"} 
+{"type":"OD","question":"Order the order of precedence (PEMDAS)", "items":["Addition","Exponents","Parentheses","Multiplication"],"answer":"3,2,4,1"} 
+{"type":"OD","question":"Order the output of range(1, 10, 3)", "items":["7","1","4"],"answer":"2,3,1"} 
+{"type":"OD","question":"Order the components of a function", "items":["Definition","Call","Declaration"],"answer":"3,1,2"} 
+{"type":"OD","question":"Order these data structures from smallest to largest size if they contain 1, 2, and 3 elements respectively", "items":["3-item List","1-item List","2-item List"],"answer":"2,3,1"}
+{"type":"OD","question":"Order the logic of a While Loop", "items":["Update","Condition Check","Initialization"],"answer":"3,2,1"} 
+{"type":"OD","question":"Order the execution of an If-Elif-Else chain", "items":["Else","Elif","If"],"answer":"3,2,1"} 
+{"type":"OD","question":"Order the steps of Recursion Tracing", "items":["Resolve upward","Reach Base Case","Call with smaller input"],"answer":"3,2,1"} 
+{"type":"OD","question":"Order flowchart symbols in a standard 'Input then Process' flow", "items":["Rectangle","Parallelogram","Oval (Start)"],"answer":"3,2,1"} 
+{"type":"OD","question":"Order variable name parts in C++ style", "items":["Identifier","Data Type","Value"],"answer":"2,1,3"} 
+{"type":"OD","question":"Order the result of scores = [72, 55, 88] after sorted()", "items":["88","55","72"],"answer":"2,3,1"}
+{"type":"OD","question":"Order the string 'Python' by index", "items":["y","P","h"],"answer":"2,1,3"}
+{"type":"OD","question":"Order the values produced by range(5, 0, -1)", "items":["5","3","1"],"answer":"1,2,3"} 
+{"type":"OD","question":"Order from simplest to most complex decision structure", "items":["Nested if","if-else","if"],"answer":"3,2,1"} 
+{"type":"OD","question":"Order these values by numerical size", "items":["3.14","3","3.1"],"answer":"2,3,1"}
+{"type":"OD","question":"Order the steps to add to a list in a loop", "items":["append()","filter with if","for loop"],"answer":"3,2,1"} 
+{"type":"OD","question":"Order these collection types by mutability (Immutable first)", "items":["List","Tuple"],"answer":"2,1"} 
+{"type":"OD","question":"Order the output of 'ABC'[:2]", "items":["B","A"],"answer":"2,1"}
+{"type":"OD","question":"Order the results of sum_numbers(1), (2), and (3)", "items":["6","1","3"],"answer":"2,3,1"} 
+{"type":"OD","question":"Order the parts of an input statement", "items":["Prompt","Variable","Input command"],"answer":"2,3,1"} 
+{"type":"OD","question":"Order boolean results (False first)", "items":["5 == 5","5 > 10"],"answer":"2,1"}
+{"type":"OD","question":"Order the lines of a docstring", "items":["Longer description","Blank line","One-line summary"],"answer":"3,2,1"} 
+{"type":"OD","question":"Order these by Python version release (Oldest first)", "items":["Python 3","Python 2","Python 1"],"answer":"3,2,1"}
+{"type":"OD","question":"Order the process of tracing a nested loop", "items":["Inner loop iteration","Outer loop iteration","Final output"],"answer":"2,1,3"} 
+{"type":"OD","question":"Order these by memory hierarchy (Fastest first)", "items":["Hard Drive","RAM","CPU Cache"],"answer":"3,2,1"}
+{"type":"OD","question":"Order the string 'Hi' + ' ' + 'Art'", "items":[" ","Hi","Art"],"answer":"2,1,3"} 
+{"type":"OD","question":"Order the values of x = [10, 20, 30] from index 0 to 2", "items":["30","10","20"],"answer":"2,3,1"}
+{"type":"OD","question":"Order the logic of 'not (5 > 2)'", "items":["Reverse with not","Evaluate (5 > 2)"],"answer":"2,1"} 
+{"type":"OD","question":"Order a program's lifecycle", "items":["Output","Input","Processing"],"answer":"2,3,1"}
