@@ -1,74 +1,91 @@
-/*
- * Game On Learning - Educational RPG (C++ Port)
- * Converted from Python compact console build.
- * Compile: g++ -std=c++17 -o game_rpg game_rpg.cpp
- */
+#include <algorithm>  // Provides helpers like find, shuffle, all_of, remove, min, and max.
+#include <chrono>     // Provides time durations used by sleep_for on non-Windows systems.
+#include <ctime>      // Provides C-style time utilities; kept available for time-based features.
+#include <fstream>    // Provides ifstream/ofstream for loading questions and saving games.
+#include <functional> // Provides std::function for optional menu label callbacks.
+#include <iomanip>    // Provides output formatting tools; available for aligned console output.
+#include <iostream>   // Provides cin/cout for all console input and output.
+#include <map>        // Provides key-value containers for items, skills, effects, and saves.
+#include <numeric>    // Provides numeric algorithms; kept available for score/stat calculations.
+#include <random>     // Provides mt19937 and random distributions for game randomness.
+#include <set>        // Provides unique collections, used for remembered missed questions.
+#include <sstream>    // Provides string streams for parsing save fields and player input.
+#include <string>     // Provides std::string for text, names, answers, and commands.
+#include <thread>     // Provides sleep_for so animations can pause between characters.
+#include <vector>     // Provides dynamic lists for inventory, questions, nodes, and enemies.
+#include <cctype>     // Provides character checks/conversions like isdigit and tolower.
 
-#include <algorithm>
-#include <chrono>
-#include <ctime>
-#include <fstream>
-#include <functional>
-#include <iomanip>
-#include <iostream>
-#include <map>
-#include <numeric>
-#include <random>
-#include <set>
-#include <sstream>
-#include <string>
-#include <thread>
-#include <vector>
-#include <cctype>
+/*
+    Game-On Learning - C++ console version
+
+    This single file contains the whole educational RPG:
+    - global data tables define question files, classes, skills, items, and enemies;
+    - LearningEngine loads questions from text files and chooses questions during play;
+    - combat connects correct answers to attacks, mastery, focus, and rewards;
+    - the node loop lets the player choose battles, shops, trials, rests, and the boss;
+    - save/load stores the important run data in a small key=value text file.
+
+    Most comments below explain the purpose of each section and the non-obvious
+    decisions inside the logic, especially where game mechanics affect each other.
+*/
 
 #ifdef _WIN32
-#include <windows.h>
-#define CLEAR_CMD "cls"
+#include <windows.h>  // Provides Windows-only console APIs such as Sleep and SetConsoleOutputCP.
+#define CLEAR_CMD "cls" // Windows terminal command for clearing the console screen.
 #else
-#define CLEAR_CMD "clear"
+#define CLEAR_CMD "clear" // Unix-like terminal command for clearing the console screen.
 #endif
 
 // ─────────────────────── RNG ────────────────────────────────────────────────
 std::mt19937& rng() {
+    // One shared random engine keeps random behavior consistent across the game.
     static std::mt19937 gen(std::random_device{}());
     return gen;
 }
 int randInt(int lo, int hi) {
+    // Inclusive integer roll, used for damage variance, rewards, and menu generation.
     return std::uniform_int_distribution<int>(lo, hi)(rng());
 }
 double randReal() {
+    // Probability roll in the range [0.0, 1.0), used for crits and random events.
     return std::uniform_real_distribution<double>(0.0, 1.0)(rng());
 }
 template <typename T>
 T& randChoice(std::vector<T>& v) {
+    // Returns a mutable random element from a non-empty vector.
     return v[randInt(0, (int)v.size() - 1)];
 }
 template <typename T>
 const T& randChoice(const std::vector<T>& v) {
+    // Const overload lets read-only vectors use the same random choice helper.
     return v[randInt(0, (int)v.size() - 1)];
 }
 
 // ─────────────────────── GLOBALS ────────────────────────────────────────────
-double TEXT_SPEED   = 0.015;
-bool   ANIMATIONS   = true;
+double TEXT_SPEED   = 0.015; // Delay per printed character; smaller means faster text.
+bool   ANIMATIONS   = true;  // Master switch for loading dots, blinking text, and animated bars.
 
-const std::string SAVE_FILE = "compact_save.json";
+// Save file is written beside the executable/current working directory.
+const std::string SAVE_FILE = "compact_save.json"; // File where saveGame writes run progress.
 
+// Each question type maps to the notes file that stores its questions.
 const std::map<std::string, std::string> QUESTION_FILES = {
-    {"TF", "notes/TorF.txt"},
-    {"MC", "notes/MCQ.txt"},
-    {"AR", "notes/Math.txt"},
-    {"ID", "notes/Identify.txt"},
-    {"FB", "notes/FillBlanks.txt"},
-    {"OD", "notes/OD.txt"},
+    {"TF", "notes/TorF.txt"},       // True/false questions.
+    {"MC", "notes/MCQ.txt"},        // Multiple-choice questions stored as simple JSON lines.
+    {"AR", "notes/Math.txt"},       // Arithmetic questions using prompt=answer lines.
+    {"ID", "notes/Identify.txt"},   // Identification questions using prompt=answer lines.
+    {"FB", "notes/FillBlanks.txt"}, // Fill-in-the-blank questions using prompt=answer lines.
+    {"OD", "notes/OD.txt"},         // Ordering questions stored as simple JSON lines.
 };
 const std::map<std::string, int> QUESTION_DIFFICULTY = {
-    {"TF", 1}, {"MC", 2}, {"AR", 2}, {"ID", 3}, {"FB", 2}, {"OD", 3}
+    {"TF", 1}, {"MC", 2}, {"AR", 2}, {"ID", 3}, {"FB", 2}, {"OD", 3} // Higher number means harder.
 };
+// Small icons keep the generated path readable in a plain console.
 const std::map<std::string, std::string> NODE_ICONS = {
     {"battle", "[B]"}, {"elite", "[E]"}, {"shop", "[S]"},
     {"trial", "[T]"},  {"rest",  "[R]"}, {"boss", "[!]"}
 };
+// Mastery skills unlock when a player answers enough of a question type correctly.
 const std::map<std::string, std::pair<std::string, std::string>> SKILLS = {
     {"TF", {"Truth Guard",    "Start battles with +5 shield."}},
     {"MC", {"Eliminate One", "Removes one wrong multiple-choice option."}},
@@ -77,6 +94,7 @@ const std::map<std::string, std::pair<std::string, std::string>> SKILLS = {
     {"FB", {"Composure",     "First wrong answer in battle does not break streak."}},
     {"OD", {"Tactical Read", "Ordering mastery can dodge the next enemy attack."}},
 };
+// Achievement names are also used as stable keys in RunState::achievements.
 const std::map<std::string, std::string> ACHIEVEMENTS = {
     {"First Victory",   "Win your first battle."},
     {"Node Walker",     "Clear 5 nodes."},
@@ -87,10 +105,11 @@ const std::map<std::string, std::string> ACHIEVEMENTS = {
 };
 
 struct ClassBuild {
-    std::string name, passive;
-    int hp, atk, def, spd, wisdom;
-    double crit;
-    std::string desc;
+    // Template stats copied into a Player when a new character is created.
+    std::string name, passive; // Display name and passive keyword checked by combat logic.
+    int hp, atk, def, spd, wisdom; // Starting HP, attack, defense, speed, and learning power.
+    double crit; // Starting critical-hit chance as a decimal, such as 0.12 for 12%.
+    std::string desc; // Short class description shown in the class selection menu.
 };
 const std::vector<ClassBuild> CLASS_BUILDS = {
     {"Berserker", "bloodlust",  70, 14, 5, 4, 5,  0.12, "gains ATK after correct answers"},
@@ -99,7 +118,7 @@ const std::vector<ClassBuild> CLASS_BUILDS = {
     {"Sentinel",  "fortress",   90,  9, 9, 2, 5,  0.08, "wrong answers grant shield"},
 };
 
-struct RunModifier { std::string label, key, desc; };
+struct RunModifier { std::string label, key, desc; }; // Menu label, mechanic key, and explanation.
 const std::vector<RunModifier> RUN_MODIFIERS = {
     {"Standard Run",       "",         "no modifier"},
     {"Scholar's Burden",   "scholar",  "correct attacks deal double damage"},
@@ -119,12 +138,15 @@ const std::string TITLE_ART = R"(
 // ─────────────────────── UI HELPERS ─────────────────────────────────────────
 void sleepMs(int ms) {
 #ifdef _WIN32
+    // Windows uses Sleep from windows.h and expects milliseconds.
     Sleep(ms);
 #else
+    // Other platforms use the standard C++ thread sleep helper.
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 #endif
 }
 void typeText(const std::string& text, double speed = -1, bool newline = true) {
+    // Negative speed means "use the global setting" instead of overriding it.
     double s = (speed < 0) ? TEXT_SPEED : speed;
     for (char c : text) {
         std::cout << c << std::flush;
@@ -134,6 +156,7 @@ void typeText(const std::string& text, double speed = -1, bool newline = true) {
 }
 void loading(const std::string& msg, int steps = 3) {
     std::cout << msg << std::flush;
+    // Instant mode also disables waiting so menus stay quick.
     if (!ANIMATIONS || TEXT_SPEED == 0) { std::cout << '\n'; return; }
     for (int i = 0; i < steps; ++i) { sleepMs(250); std::cout << '.' << std::flush; }
     std::cout << '\n';
@@ -146,6 +169,7 @@ void divider(const std::string& title = "") {
     std::cout << line << '\n';
 }
 void flashMessage(const std::string& msg, int repeats = 2) {
+    // Rewrites the same console line to create a simple blinking effect.
     if (!ANIMATIONS || TEXT_SPEED == 0) { typeText(msg); return; }
     for (int i = 0; i < repeats; ++i) {
         std::cout << '\r' << msg << std::flush; sleepMs(180);
@@ -153,10 +177,11 @@ void flashMessage(const std::string& msg, int repeats = 2) {
     }
     std::cout << '\r' << msg << '\n';
 }
-void clearScreen() { system(CLEAR_CMD); }
-void pause() { std::cout << "\nPress Enter to continue..."; std::cin.ignore(10000, '\n'); }
+void clearScreen() { system(CLEAR_CMD); } // Runs the platform-specific clear command.
+void pause() { std::cout << "\nPress Enter to continue..."; std::cin.ignore(10000, '\n'); } // Waits for Enter before returning.
 
 std::string bar(int cur, int max, int size = 20) {
+    // Clamp current HP at zero so the bar never gets a negative filled count.
     int filled = (max > 0) ? (int)(size * std::max(0, cur) / std::max(1, max)) : 0;
     std::string b = "[";
     b += std::string(filled, '#');
@@ -165,6 +190,7 @@ std::string bar(int cur, int max, int size = 20) {
     return b;
 }
 void animatedBar(const std::string& label, int cur, int max, int size = 20) {
+    // Falls back to a normal bar when animations are turned off.
     if (!ANIMATIONS || TEXT_SPEED == 0) {
         std::cout << label << ": " << bar(cur, max, size) << '\n';
         return;
@@ -178,20 +204,22 @@ void animatedBar(const std::string& label, int cur, int max, int size = 20) {
     std::cout << "] " << cur << "/" << max << '\n';
 }
 
-// trim whitespace
+// Removes leading and trailing whitespace from file lines and player input.
 std::string trim(const std::string& s) {
-    size_t a = s.find_first_not_of(" \t\r\n");
-    if (a == std::string::npos) return "";
-    size_t b = s.find_last_not_of(" \t\r\n");
-    return s.substr(a, b - a + 1);
+    size_t a = s.find_first_not_of(" \t\r\n"); // First character that is not whitespace.
+    if (a == std::string::npos) return "";      // All-whitespace strings trim to empty.
+    size_t b = s.find_last_not_of(" \t\r\n");  // Last character that is not whitespace.
+    return s.substr(a, b - a + 1);              // Return only the non-whitespace middle.
 }
 std::string toLower(std::string s) {
+    // Normalizes answers and commands so capitalization does not matter.
     for (char& c : s) c = (char)tolower(c);
     return s;
 }
 
 // ─────────────────────── INPUT HELPERS ──────────────────────────────────────
 std::string askRaw(const std::string& prompt) {
+    // Reads the entire line so answers can contain spaces.
     std::cout << prompt << std::flush;
     std::string line;
     std::getline(std::cin, line);
@@ -199,6 +227,7 @@ std::string askRaw(const std::string& prompt) {
 }
 std::string ask(const std::string& prompt,
                 const std::vector<std::string>& valid = {}) {
+    // Keeps asking until the user enters one of the allowed choices.
     while (true) {
         std::string v = askRaw(prompt);
         if (valid.empty()) return v;
@@ -209,6 +238,7 @@ std::string ask(const std::string& prompt,
 }
 // Returns 0-based index, or -1 for cancel
 int chooseIndex(const std::string& prompt, int count) {
+    // Menus are displayed as 1-based numbers, but vectors are accessed by 0-based index.
     std::string raw = askRaw(prompt);
     std::string lo = toLower(raw);
     if (lo == "0" || lo == "b" || lo == "back" || lo == "cancel") return -1;
@@ -220,11 +250,12 @@ int chooseIndex(const std::string& prompt, int count) {
     return -1;
 }
 bool confirm(const std::string& prompt) {
-    return ask(prompt + " (y/n)> ", {"y", "n"}) == "y";
+    return ask(prompt + " (y/n)> ", {"y", "n"}) == "y"; // Converts a validated y/n prompt into true/false.
 }
 template <typename T>
 void printNumbered(const std::vector<T>& items,
                    std::function<std::string(const T&)> label = nullptr) {
+    // Optional label function lets complex objects decide how they appear in menus.
     for (int i = 0; i < (int)items.size(); ++i) {
         std::string lbl = label ? label(items[i]) : [&]() -> std::string {
             std::ostringstream oss; oss << items[i]; return oss.str();
@@ -235,71 +266,79 @@ void printNumbered(const std::vector<T>& items,
 
 // ─────────────────────── DATA STRUCTURES ─────────────────────────────────────
 struct Question {
-    std::string qtype, text, answer;
-    int difficulty = 1;
-    std::vector<std::string> options;   // MC
-    std::vector<std::string> items;     // OD
+    // Shared question model; only MC uses options and only OD uses items.
+    std::string qtype, text, answer;      // Type code, question prompt, and correct answer.
+    int difficulty = 1;                   // Difficulty tier used when selecting questions.
+    std::vector<std::string> options;     // Multiple-choice answer options.
+    std::vector<std::string> items;       // Ordering-question items before the player reorders them.
 };
 
 struct Effects {
+    // Tracks timed status effects by name, where the value is turns remaining.
     std::map<std::string, int> data;
     int get(const std::string& k) const {
+        // Missing effects count as zero turns remaining.
         auto it = data.find(k); return it != data.end() ? it->second : 0;
     }
-    void set(const std::string& k, int v) { data[k] = v; }
+    void set(const std::string& k, int v) { data[k] = v; } // Starts or refreshes an effect duration.
     int pop(const std::string& k) {
+        // Consumes one-shot effects such as momentum.
         auto it = data.find(k); if (it == data.end()) return 0;
-        int v = it->second; data.erase(it); return v;
+        int v = it->second; data.erase(it); return v; // Return old duration after removing the effect.
     }
     void tick() {
+        // Decrease all active timers, then erase expired effects after iteration.
         std::vector<std::string> expired;
-        for (auto& [k, v] : data) { --v; if (v <= 0) expired.push_back(k); }
-        for (auto& k : expired) data.erase(k);
+        for (auto& [k, v] : data) { --v; if (v <= 0) expired.push_back(k); } // Count down each timer.
+        for (auto& k : expired) data.erase(k); // Remove expired keys after the map loop finishes.
     }
     std::string list() const {
         std::string s;
-        for (auto& [k, v] : data) s += k + "(" + std::to_string(v) + ") ";
-        return s.empty() ? "none" : s;
+        for (auto& [k, v] : data) s += k + "(" + std::to_string(v) + ") "; // Format each active effect.
+        return s.empty() ? "none" : s; // Show "none" instead of a blank status line.
     }
 };
 
 struct Fighter {
-    std::string name;
-    int max_hp, atk, defense, spd;
-    double crit, crit_mult = 1.5;
-    int hp = 0, shield = 0;
-    std::string behavior = "neutral";
-    Effects effects;
+    // Base combatant model shared by player and enemies.
+    std::string name;                  // Combatant display name.
+    int max_hp, atk, defense, spd;     // Core stats: health cap, damage, damage reduction, dodge speed.
+    double crit, crit_mult = 1.5;      // Critical chance and critical damage multiplier.
+    int hp = 0, shield = 0;            // Current health and temporary damage absorption.
+    std::string behavior = "neutral";  // Enemy AI style; players usually keep neutral behavior.
+    Effects effects;                   // Timed buffs/debuffs currently affecting this fighter.
 
     Fighter() = default;
     Fighter(std::string n, int mhp, int a, int d, int sp, double cr, std::string beh = "neutral")
         : name(std::move(n)), max_hp(mhp), atk(a), defense(d), spd(sp), crit(cr), behavior(std::move(beh)) {
-        hp = max_hp;
+        hp = max_hp; // New fighters start at full health.
     }
-    bool alive() const { return hp > 0; }
+    bool alive() const { return hp > 0; } // True while this fighter can still act.
     void takeDamage(int amount) {
+        // Shield absorbs damage first, then remaining damage lowers HP.
         if (shield > 0) {
-            int blocked = std::min(shield, amount);
-            shield -= blocked; amount -= blocked;
+            int blocked = std::min(shield, amount); // Shield can block only up to its current value.
+            shield -= blocked; amount -= blocked;   // Remove blocked damage from shield and incoming hit.
             if (blocked) typeText(name + "'s shield blocks " + std::to_string(blocked) + " damage.");
         }
-        hp = std::max(0, hp - amount);
+        hp = std::max(0, hp - amount); // Clamp HP at zero so it never becomes negative.
     }
-    void heal(int amount) { hp = std::min(max_hp, hp + amount); }
+    void heal(int amount) { hp = std::min(max_hp, hp + amount); } // Heal without exceeding max HP.
 };
 
 struct Player : Fighter {
-    std::string class_name = "Adventurer", passive, run_modifier;
-    int wisdom = 5, level = 1, exp = 0, next_exp = 100;
-    int gold = 20, streak = 0, best_streak = 0, focus = 0;
-    bool hint_ready = false, dodge_next = false, streak_guard = false;
-    int bloodlust_stacks = 0;
-    int correct_answers = 0, total_answers = 0;
-    std::vector<std::string> skills;
+    // Player adds RPG progression, learning progress, inventory, and class passives.
+    std::string class_name = "Adventurer", passive, run_modifier; // Chosen class and run-rule keywords.
+    int wisdom = 5, level = 1, exp = 0, next_exp = 100;           // Learning stat and leveling progress.
+    int gold = 20, streak = 0, best_streak = 0, focus = 0;        // Economy, answer streak, and focus meter.
+    bool hint_ready = false, dodge_next = false, streak_guard = false; // One-use tactical flags.
+    int bloodlust_stacks = 0;                                     // Caps Berserker passive attack growth.
+    int correct_answers = 0, total_answers = 0;                   // Accuracy counters for run summary.
+    std::vector<std::string> skills;                              // Unlocked mastery skill type codes.
     std::map<std::string, int> mastery = {
-        {"TF",0},{"MC",0},{"AR",0},{"ID",0},{"FB",0},{"OD",0}
+        {"TF",0},{"MC",0},{"AR",0},{"ID",0},{"FB",0},{"OD",0}   // Correct-answer counts per question type.
     };
-    std::vector<std::string> inventory = {"Potion", "Attack Tonic", "Hint"};
+    std::vector<std::string> inventory = {"Potion", "Attack Tonic", "Hint"}; // Starting items by item name.
 
     Player() : Fighter() {}
     Player(std::string n, int mhp, int a, int d, int sp, double cr, int wis = 5)
@@ -307,15 +346,17 @@ struct Player : Fighter {
 };
 
 struct RunState {
-    int tier = 1, nodes = 0, battles_won = 0, elites_won = 0;
-    bool boss_won = false;
-    std::map<std::string, std::map<std::string, int>> bestiary;
-    std::vector<std::string> achievements;
-    std::vector<std::string> journal;
+    // RunState stores progress that belongs to the whole run, not just the player.
+    int tier = 1, nodes = 0, battles_won = 0, elites_won = 0; // Path progress and combat milestones.
+    bool boss_won = false; // Marks final victory so Boss Clear can unlock.
+    std::map<std::string, std::map<std::string, int>> bestiary; // Enemy name -> seen/kills counters.
+    std::vector<std::string> achievements; // Names of achievements already unlocked.
+    std::vector<std::string> journal;      // Recent node history used by the map display and save file.
 };
 
 // ─────────────────────── ITEMS ───────────────────────────────────────────────
 struct Item { std::string name, kind; int price, value; };
+// Item kind decides whether the effect targets the player, the enemy, or rewards.
 const std::map<std::string, Item> ITEMS = {
     {"Potion",         {"Potion",         "heal",    15, 25}},
     {"Mega Potion",    {"Mega Potion",     "heal",    35, 60}},
@@ -328,6 +369,7 @@ const std::map<std::string, Item> ITEMS = {
     {"Hint",           {"Hint",            "hint",    20,  0}},
 };
 std::vector<std::string> itemNames() {
+    // Converts the item map keys into a list that can be shuffled or randomly chosen.
     std::vector<std::string> v;
     for (auto& [k, _] : ITEMS) v.push_back(k);
     return v;
@@ -335,9 +377,10 @@ std::vector<std::string> itemNames() {
 
 // ─────────────────────── ENEMIES ─────────────────────────────────────────────
 struct EnemyTemplate {
-    std::string name, behavior;
-    int hp, atk, def, spd;
-    double crit;
+    // Templates are copied into live Fighter objects when encounters begin.
+    std::string name, behavior; // Enemy display name and AI behavior keyword.
+    int hp, atk, def, spd;      // Base enemy stats copied into Fighter.
+    double crit;                // Base critical-hit chance.
 };
 const std::map<int, std::vector<EnemyTemplate>> ENEMIES = {
     {1, {{"Bug",             "neutral",   35,  8, 1, 4, 0.05},
@@ -352,23 +395,26 @@ const std::map<int, std::vector<EnemyTemplate>> ENEMIES = {
 };
 
 Fighter enemyFor(int tier, bool elite = false, bool boss = false) {
+    // Tier is capped so later encounters reuse the strongest enemy pool.
     auto it = ENEMIES.find(std::min(3, tier));
-    const auto& pool = it != ENEMIES.end() ? it->second : ENEMIES.at(1);
-    const auto& tmpl = randChoice(pool);
-    Fighter f(tmpl.name, tmpl.hp, tmpl.atk, tmpl.def, tmpl.spd, tmpl.crit, tmpl.behavior);
+    const auto& pool = it != ENEMIES.end() ? it->second : ENEMIES.at(1); // Use tier pool, or tier 1 as fallback.
+    const auto& tmpl = randChoice(pool); // Pick one template randomly from that tier.
+    Fighter f(tmpl.name, tmpl.hp, tmpl.atk, tmpl.def, tmpl.spd, tmpl.crit, tmpl.behavior); // Convert template to live enemy.
     if (elite) {
+        // Elite fights are upgraded normal enemies with stronger stats and a random style.
         f.name = "Elite " + f.name;
-        f.max_hp = (int)(f.max_hp * 1.5); f.hp = f.max_hp;
-        f.atk = (int)(f.atk * 1.3); f.defense += 2;
-        std::vector<std::string> behs = {"aggressive","defensive","evasive"};
-        f.behavior = randChoice(behs);
+        f.max_hp = (int)(f.max_hp * 1.5); f.hp = f.max_hp; // Elite gets more max HP and refills to it.
+        f.atk = (int)(f.atk * 1.3); f.defense += 2;        // Elite gets stronger offense and defense.
+        std::vector<std::string> behs = {"aggressive","defensive","evasive"}; // Possible elite AI styles.
+        f.behavior = randChoice(behs); // Elite behavior is randomized for variety.
     }
     if (boss) {
+        // Boss fights are the final scaling pass over the chosen template.
         f.name = "Boss " + f.name;
-        f.max_hp = (int)(f.max_hp * 2.2); f.hp = f.max_hp;
-        f.atk = (int)(f.atk * 1.5); f.defense += 4;
-        f.crit = std::min(0.5, f.crit + 0.08);
-        f.behavior = "boss";
+        f.max_hp = (int)(f.max_hp * 2.2); f.hp = f.max_hp; // Boss has much more HP and starts full.
+        f.atk = (int)(f.atk * 1.5); f.defense += 4;        // Boss hits harder and takes less damage.
+        f.crit = std::min(0.5, f.crit + 0.08);             // Raise crit chance but cap it at 50%.
+        f.behavior = "boss";                               // Boss behavior enables phase logic in combat.
     }
     return f;
 }
@@ -378,41 +424,45 @@ Fighter enemyFor(int tier, bool elite = false, bool boss = false) {
 // MC/OD lines are JSON objects. We parse them ourselves to avoid dependencies.
 
 bool parseJsonString(const std::string& json, const std::string& key, std::string& out) {
-    std::string search = "\"" + key + "\"";
-    auto pos = json.find(search);
-    if (pos == std::string::npos) return false;
-    pos = json.find(':', pos); if (pos == std::string::npos) return false;
-    pos = json.find('"', pos + 1); if (pos == std::string::npos) return false;
-    size_t end = json.find('"', pos + 1);
-    if (end == std::string::npos) return false;
-    out = json.substr(pos + 1, end - pos - 1);
+    // Finds "key": "value" in the simple one-line JSON used by MC and OD files.
+    std::string search = "\"" + key + "\""; // Build the literal key text, for example "answer".
+    auto pos = json.find(search);            // Find where that key appears in the line.
+    if (pos == std::string::npos) return false; // Key missing means this line is not usable.
+    pos = json.find(':', pos); if (pos == std::string::npos) return false; // Move to the key/value separator.
+    pos = json.find('"', pos + 1); if (pos == std::string::npos) return false; // Find opening quote of value.
+    size_t end = json.find('"', pos + 1); // Find closing quote of value.
+    if (end == std::string::npos) return false; // Missing close quote means malformed JSON-like text.
+    out = json.substr(pos + 1, end - pos - 1); // Copy the value between the quotes.
     return true;
 }
 std::vector<std::string> parseJsonArray(const std::string& json, const std::string& key) {
+    // Parses a flat string array such as "options": ["A", "B", "C"].
     std::vector<std::string> result;
-    std::string search = "\"" + key + "\"";
-    auto pos = json.find(search);
-    if (pos == std::string::npos) return result;
-    pos = json.find('[', pos); if (pos == std::string::npos) return result;
-    size_t end = json.find(']', pos);
-    if (end == std::string::npos) return result;
-    std::string arr = json.substr(pos + 1, end - pos - 1);
+    std::string search = "\"" + key + "\""; // Build the literal key text, for example "options".
+    auto pos = json.find(search);            // Find the requested array key.
+    if (pos == std::string::npos) return result; // Missing key returns an empty list.
+    pos = json.find('[', pos); if (pos == std::string::npos) return result; // Find start of array.
+    size_t end = json.find(']', pos); // Find end of array.
+    if (end == std::string::npos) return result; // Malformed array returns empty.
+    std::string arr = json.substr(pos + 1, end - pos - 1); // Extract contents between brackets.
     std::istringstream ss(arr);
     std::string token;
     while (std::getline(ss, token, ',')) {
-        std::string t = trim(token);
+        std::string t = trim(token); // Clean spaces around each comma-separated value.
         if (t.size() >= 2 && t.front() == '"' && t.back() == '"')
-            t = t.substr(1, t.size() - 2);
-        if (!t.empty()) result.push_back(t);
+            t = t.substr(1, t.size() - 2); // Remove surrounding quotes from string entries.
+        if (!t.empty()) result.push_back(t); // Keep only non-empty parsed values.
     }
     return result;
 }
 
 struct LearningEngine {
+    // Owns all loaded questions and remembers missed questions for review/weighting.
     std::vector<Question> questions;
     std::vector<Question> wrong;
 
     void loadAll() {
+        // Load every configured question file using that type's default difficulty.
         for (auto& [qtype, relpath] : QUESTION_FILES) {
             int diff = QUESTION_DIFFICULTY.at(qtype);
             loadFile(relpath, qtype, diff);
@@ -423,6 +473,7 @@ struct LearningEngine {
     void loadFile(const std::string& path, const std::string& qtype, int difficulty) {
         std::ifstream f(path);
         if (!f.is_open()) {
+            // Missing files do not stop the game; they simply reduce the question pool.
             std::cout << "Missing question file: " << path << '\n';
             return;
         }
@@ -431,21 +482,25 @@ struct LearningEngine {
             line = trim(line);
             if (line.empty()) continue;
             Question q;
+            // Every loaded question keeps its type so mastery can be awarded later.
             q.qtype = qtype;
             q.difficulty = difficulty;
             if (qtype == "TF" || qtype == "AR" || qtype == "ID" || qtype == "FB") {
+                // Simple question files use "prompt = answer" lines.
                 auto eq = line.find('=');
                 if (eq == std::string::npos) continue;
                 q.text   = trim(line.substr(0, eq));
                 q.answer = trim(line.substr(eq + 1));
                 questions.push_back(q);
             } else if (qtype == "MC") {
+                // Multiple choice needs a prompt, an answer, and display options.
                 if (!parseJsonString(line, "question", q.text)) continue;
                 if (!parseJsonString(line, "answer",   q.answer)) continue;
                 q.options = parseJsonArray(line, "options");
                 if (q.options.empty()) continue;
                 questions.push_back(q);
             } else if (qtype == "OD") {
+                // Ordering questions store items plus the correct index order.
                 if (!parseJsonString(line, "question", q.text)) continue;
                 if (!parseJsonString(line, "answer",   q.answer)) continue;
                 q.items = parseJsonArray(line, "items");
@@ -456,17 +511,20 @@ struct LearningEngine {
     }
 
     Question* pick(int difficulty = -1) {
+        // Build a pool matching requested difficulty, or all questions if difficulty is -1.
         std::vector<Question*> pool;
         for (auto& q : questions)
             if (difficulty < 0 || q.difficulty == difficulty)
                 pool.push_back(&q);
         if (pool.empty() && difficulty >= 0) {
+            // If no exact difficulty exists, fall back to all questions so combat can continue.
             for (auto& q : questions) pool.push_back(&q);
         }
         if (pool.empty()) return nullptr;
         std::set<std::string> missed;
         for (auto& q : wrong) missed.insert(q.text);
         std::vector<int> weights;
+        // Missed questions are weighted higher to encourage spaced review.
         for (auto* q : pool) weights.push_back(missed.count(q->text) ? 3 : 1);
         int total = 0; for (int w : weights) total += w;
         int r = randInt(0, total - 1);
@@ -481,6 +539,7 @@ struct LearningEngine {
 
 // ─────────────────────── SKILLS / EFFECTS ────────────────────────────────────
 void unlockSkills(Player& p) {
+    // A mastery skill unlocks once per question type at 5 correct answers.
     for (auto& [qtype, mastery] : p.mastery) {
         if (mastery >= 5 && std::find(p.skills.begin(), p.skills.end(), qtype) == p.skills.end()) {
             p.skills.push_back(qtype);
@@ -491,39 +550,45 @@ void unlockSkills(Player& p) {
 }
 
 int effectiveAtk(const Fighter& f) {
-    int total = f.atk;
-    if (f.effects.get("attack_up") > 0) total += 5;
-    if (f.effects.get("weakness")  > 0) total -= 5;
-    return std::max(1, total);
+    // Temporary effects modify the stored base attack without permanently changing it.
+    int total = f.atk; // Start from the fighter's permanent attack stat.
+    if (f.effects.get("attack_up") > 0) total += 5; // Attack tonic temporarily adds damage.
+    if (f.effects.get("weakness")  > 0) total -= 5; // Weakness curse temporarily lowers damage.
+    return std::max(1, total); // Attack must stay at least 1 so damage math remains usable.
 }
 int effectiveDef(const Fighter& f) {
-    int total = f.defense;
-    if (f.effects.get("defense_up") > 0) total += 5;
-    return std::max(0, total);
+    // Defense buffs are calculated here so all damage calls use the same rules.
+    int total = f.defense; // Start from permanent defense.
+    if (f.effects.get("defense_up") > 0) total += 5; // Shield tonic/defensive behavior adds defense.
+    return std::max(0, total); // Defense cannot go below zero.
 }
 
 std::pair<int, bool> calcDamage(Fighter& attacker, const Fighter& defender,
                                 int mastery_bonus = 0,
                                 const Player* player_hint = nullptr) {
-    int base = effectiveAtk(attacker) - effectiveDef(defender) + randInt(-2, 3);
-    base = std::max(1, base);
-    base += mastery_bonus / 5;
+    // Base damage uses attack minus defense plus a small random swing.
+    int base = effectiveAtk(attacker) - effectiveDef(defender) + randInt(-2, 3); // Core damage formula.
+    base = std::max(1, base); // Every successful hit deals at least 1 damage.
+    // Mastery and player learning stats can add extra damage for correct answers.
+    base += mastery_bonus / 5; // Every 5 mastery points add 1 bonus damage.
     if (player_hint) {
-        base += player_hint->streak / 4;
-        base = (int)(base * (1.0 + player_hint->wisdom * 0.01));
+        base += player_hint->streak / 4; // Strong answer streaks add damage.
+        base = (int)(base * (1.0 + player_hint->wisdom * 0.01)); // Wisdom gives a percent damage boost.
     }
-    double crit_bonus = (attacker.effects.pop("momentum") > 0) ? 0.20 : 0.0;
-    bool crit = randReal() < attacker.crit + crit_bonus;
-    if (crit) base = (int)(base * attacker.crit_mult);
+    double crit_bonus = (attacker.effects.pop("momentum") > 0) ? 0.20 : 0.0; // Duelist bonus if active.
+    // pop("momentum") makes the Duelist bonus apply to only one attack.
+    bool crit = randReal() < attacker.crit + crit_bonus; // Roll whether this hit is critical.
+    if (crit) base = (int)(base * attacker.crit_mult); // Critical hits multiply final damage.
     return {base, crit};
 }
 
 void tickEffects(Fighter& f) {
+    // Damage-over-time effects happen before their duration is reduced.
     if (f.effects.get("poison") > 0) {
-        f.takeDamage(5);
+        f.takeDamage(5); // Poison always deals 5 damage per tick.
         typeText(f.name + " takes 5 poison damage.");
     }
-    f.effects.tick();
+    f.effects.tick(); // Reduce remaining durations after applying tick effects.
 }
 
 // ─────────────────────── QUESTIONS ───────────────────────────────────────────
@@ -542,6 +607,7 @@ std::pair<bool, std::string> askQuestion(LearningEngine& engine, Player& p,
     typeText(q.text, 0.005);
 
     if (p.hint_ready) {
+        // Hint is a one-use flag set by items or mastery skills.
         if (q.qtype == "MC" && !q.options.empty()) {
             std::vector<std::string> wrong;
             for (auto& o : q.options)
@@ -557,10 +623,12 @@ std::pair<bool, std::string> askQuestion(LearningEngine& engine, Player& p,
 
     std::string answer;
     if (q.qtype == "TF") {
+        // True/false answers are restricted so spelling variants do not enter the check.
         answer = ask("(true/false)> ", {"true", "false"});
     } else if (q.qtype == "MC") {
         auto options = q.options;
         if (std::find(p.skills.begin(), p.skills.end(), "MC") != p.skills.end()) {
+            // Eliminate One removes a wrong option before the player chooses.
             std::vector<std::string> wrng;
             for (auto& o : options) if (toLower(o) != toLower(q.answer)) wrng.push_back(o);
             if (!wrng.empty() && options.size() > 2) {
@@ -574,6 +642,7 @@ std::pair<bool, std::string> askQuestion(LearningEngine& engine, Player& p,
         int idx = chooseIndex("> ", (int)options.size());
         answer = (idx >= 0) ? options[idx] : "";
     } else if (q.qtype == "OD") {
+        // Ordering questions show items shuffled, then compare chosen item order.
         auto shown = q.items;
         std::shuffle(shown.begin(), shown.end(), rng());
         for (int i = 0; i < (int)shown.size(); ++i)
@@ -588,7 +657,7 @@ std::pair<bool, std::string> askQuestion(LearningEngine& engine, Player& p,
                 if (idx2 >= 0 && idx2 < (int)shown.size()) chosen.push_back(shown[idx2]);
             }
         }
-        // Build correct order from q.answer indices
+        // Build correct order from q.answer indices.
         std::istringstream sa(q.answer); std::string ta;
         while (std::getline(sa, ta, ',')) {
             ta = trim(ta);
@@ -607,6 +676,7 @@ std::pair<bool, std::string> askQuestion(LearningEngine& engine, Player& p,
 
 std::pair<bool, std::string> finishQuestion(bool correct, LearningEngine& engine,
                                             Player& p, const Question& q) {
+    // Centralizes all learning rewards/penalties so every question type updates stats equally.
     p.total_answers++;
     if (correct) {
         typeText("Correct.");
@@ -615,9 +685,11 @@ std::pair<bool, std::string> finishQuestion(bool correct, LearningEngine& engine
         p.streak++;
         p.best_streak = std::max(p.best_streak, p.streak);
         int focus_gain = 10 + p.wisdom / 5;
+        // Arcanist gets extra focus because its passive is built around frequent focus use.
         if (p.passive == "insight") focus_gain += 5;
         p.focus = std::min(100, p.focus + focus_gain);
         if (p.passive == "bloodlust" && p.bloodlust_stacks < 10) {
+            // Bloodlust is capped so attack cannot grow forever in one run.
             p.atk++; p.bloodlust_stacks++;
             typeText("[Bloodlust] ATK rises by 1.");
         }
@@ -625,6 +697,7 @@ std::pair<bool, std::string> finishQuestion(bool correct, LearningEngine& engine
         if (q.qtype == "OD" &&
             std::find(p.skills.begin(), p.skills.end(), "OD") != p.skills.end() &&
             randReal() < 0.25) {
+            // Ordering mastery occasionally converts a correct answer into a future dodge.
             p.dodge_next = true;
             typeText("[Tactical Read] Next attack may be dodged.");
         }
@@ -633,6 +706,7 @@ std::pair<bool, std::string> finishQuestion(bool correct, LearningEngine& engine
         typeText("Wrong. Correct answer: " + q.answer);
         engine.wrong.push_back(q);
         if (p.streak_guard) {
+            // Composure protects the streak once, then consumes the guard.
             p.streak_guard = false;
             typeText("[Composure] Streak protected.");
         } else {
@@ -644,6 +718,7 @@ std::pair<bool, std::string> finishQuestion(bool correct, LearningEngine& engine
             typeText("[Fortress] Shield +8.");
         }
         if (p.run_modifier == "cursed") {
+            // Cursed Knowledge turns wrong answers into direct HP pressure.
             p.takeDamage(10);
             typeText("[Cursed Knowledge] You lose 10 HP.");
         }
@@ -653,6 +728,7 @@ std::pair<bool, std::string> finishQuestion(bool correct, LearningEngine& engine
 
 // ─────────────────────── MASTERY SKILL USE ───────────────────────────────────
 void useMasterySkill(Player& p, Fighter& enemy) {
+    // Active mastery skills give the player tactical options besides answering.
     if (p.skills.empty()) { typeText("No mastery skills unlocked yet."); return; }
     std::cout << "\nUnlocked Skills:\n0. Cancel\n";
     for (int i = 0; i < (int)p.skills.size(); ++i) {
@@ -672,6 +748,7 @@ void useMasterySkill(Player& p, Fighter& enemy) {
 
 // ─────────────────────── ITEMS IN COMBAT ─────────────────────────────────────
 bool applyPlayerItem(Player& p, const Item& item) {
+    // Player-targeting items heal, buff, or prepare non-damaging advantages.
     if (item.kind == "heal") {
         int h = item.value + (std::find(p.skills.begin(), p.skills.end(), "ID") != p.skills.end() ? p.mastery.at("ID") : 0);
         p.heal(h); typeText("Healed " + std::to_string(h) + " HP."); return true;
@@ -683,12 +760,14 @@ bool applyPlayerItem(Player& p, const Item& item) {
     return false;
 }
 bool applyEnemyItem(Fighter& enemy, const Item& item) {
+    // Enemy-targeting items apply debuffs that combat effects will read later.
     if (item.kind == "poison")   { enemy.effects.set("poison", 4); typeText(enemy.name + " is poisoned for 4 turns."); return true; }
     if (item.kind == "freeze")   { enemy.effects.set("freeze", item.value); typeText(enemy.name + " is frozen."); return true; }
     if (item.kind == "weakness") { enemy.effects.set("weakness", 3); typeText(enemy.name + "'s ATK is reduced for 3 turns."); return true; }
     return false;
 }
 void useItem(Player& p, Fighter& enemy) {
+    // Inventory stores item names, so this function looks up each name in ITEMS.
     if (p.inventory.empty()) { typeText("Inventory empty."); return; }
     std::cout << "0. Cancel\n";
     for (int i = 0; i < (int)p.inventory.size(); ++i)
@@ -696,6 +775,7 @@ void useItem(Player& p, Fighter& enemy) {
     int idx = chooseIndex("Use which item? ", (int)p.inventory.size());
     if (idx < 0) return;
     std::string iname = p.inventory[idx];
+    // Remove the item before applying it so combat items are single-use.
     p.inventory.erase(p.inventory.begin() + idx);
     auto it = ITEMS.find(iname);
     if (it == ITEMS.end()) { typeText("Unknown item."); return; }
@@ -706,6 +786,7 @@ void useItem(Player& p, Fighter& enemy) {
 
 // ─────────────────────── COMBAT STATS DISPLAY ────────────────────────────────
 void showStats(const Player& p, const Fighter& enemy) {
+    // Prints both combatants each turn so the player can make an informed choice.
     std::cout << '\n';
     divider("Combat");
     animatedBar(p.name, p.hp, p.max_hp);
@@ -722,6 +803,7 @@ void showStats(const Player& p, const Fighter& enemy) {
 
 // ─────────────────────── PLAYER TURN ─────────────────────────────────────────
 std::string playerTurn(Player& p, Fighter& enemy, LearningEngine& engine, bool boss = false) {
+    // Returns a combat command result such as "continue" or "escape".
     showStats(p, enemy);
     std::cout << "1. Answer/Attack\n";
     std::cout << "2. Use Item\n";
@@ -731,16 +813,19 @@ std::string playerTurn(Player& p, Fighter& enemy, LearningEngine& engine, bool b
     std::string choice = ask("> ", {"1","2","3","4","5"});
 
     if (choice == "1") {
-        auto [correct, qtype] = askQuestion(engine, p, boss ? 3 : -1);
+        // Answering correctly is the normal attack action.
+        auto [correct, qtype] = askQuestion(engine, p, boss ? 3 : -1); // Boss forces hardest questions.
         if (correct) {
-            int mastery = p.mastery.count(qtype) ? p.mastery.at(qtype) : 0;
+            int mastery = p.mastery.count(qtype) ? p.mastery.at(qtype) : 0; // Read mastery for answered type.
             if (enemy.effects.get("evasive") > 0 && randReal() < 0.30) {
+                // Evasive stance can cancel the player's successful attack.
                 typeText(enemy.name + " evades your attack.");
                 return "continue";
             }
             auto [amount, crit] = calcDamage(p, enemy, mastery, &p);
+            // Scholar's Burden makes the run easier on correct answers but changes balance.
             if (p.run_modifier == "scholar") amount *= 2;
-            enemy.takeDamage(amount);
+            enemy.takeDamage(amount); // Apply final calculated damage to enemy HP/shield.
             typeText(p.name + " hits for " + std::to_string(amount) + " damage." +
                      (crit ? " Critical!" : ""));
         }
@@ -748,42 +833,47 @@ std::string playerTurn(Player& p, Fighter& enemy, LearningEngine& engine, bool b
     }
     if (choice == "2") { useItem(p, enemy); return "continue"; }
     if (choice == "3") {
+        // Focus is a meter-based burst that spends 100 focus at once.
         if (p.focus >= 100) {
-            p.focus = 0;
-            int amt = p.atk * 2 + p.wisdom;
-            enemy.takeDamage(amt); p.heal(10);
+            p.focus = 0; // Spend the full meter.
+            int amt = p.atk * 2 + p.wisdom; // Focus damage scales with combat and learning stats.
+            enemy.takeDamage(amt); p.heal(10); // Burst both damages enemy and slightly heals player.
             typeText("Focus burst deals " + std::to_string(amt) + " damage and restores 10 HP.");
         } else { typeText("Focus is not ready."); }
         return "continue";
     }
     if (choice == "5") { useMasterySkill(p, enemy); return "continue"; }
     // choice == "4"
+    // Boss battles do not allow running, so choice 4 becomes Guard.
     if (boss) { p.defense += 3; typeText("You guard. DEF +3."); return "continue"; }
     if (p.run_modifier == "ironwill") { typeText("[Iron Will] You cannot run from battle."); return "continue"; }
-    return (randReal() < 0.55) ? "escape" : "continue";
+    return (randReal() < 0.55) ? "escape" : "continue"; // Normal escape has a 55% success chance.
 }
 
 // ─────────────────────── ENEMY TURN ──────────────────────────────────────────
 void enemyTurn(Fighter& enemy, Player& p) {
-    if (enemy.effects.get("freeze") > 0) { typeText(enemy.name + " is frozen and skips the turn."); return; }
-    if (p.dodge_next) { p.dodge_next = false; typeText(p.name + " reads the attack and dodges."); return; }
+    // Enemy behavior can replace a normal attack with a defensive/evasive action.
+    if (enemy.effects.get("freeze") > 0) { typeText(enemy.name + " is frozen and skips the turn."); return; } // Freeze skips enemy action.
+    if (p.dodge_next) { p.dodge_next = false; typeText(p.name + " reads the attack and dodges."); return; } // One prepared dodge is consumed.
     if (enemy.behavior == "defensive" && randReal() < 0.35) {
-        enemy.shield += 10; enemy.effects.set("defense_up", 2);
+        enemy.shield += 10; enemy.effects.set("defense_up", 2); // Defensive enemy gains shield and DEF.
         typeText(enemy.name + " braces behind a shield."); return;
     }
     if (enemy.behavior == "evasive" && randReal() < 0.30) {
-        enemy.effects.set("evasive", 1);
+        enemy.effects.set("evasive", 1); // Evasive stance can avoid the next player hit.
         typeText(enemy.name + " shifts into an evasive stance."); return;
     }
     double dodge_chance = std::min(0.35, p.spd * 0.02 + p.streak * 0.003);
+    // Speed and learning streak both help the player avoid incoming attacks.
     if (randReal() < dodge_chance) { typeText(p.name + " dodges."); return; }
 
     int hits = (enemy.behavior == "aggressive") ? 2 : 1;
+    // Aggressive enemies split their damage across two hits.
     for (int h = 0; h < hits; ++h) {
         if (!p.alive()) return;
-        auto [amount, crit] = calcDamage(enemy, p);
-        if (hits == 2) amount = std::max(1, amount / 2);
-        p.takeDamage(amount);
+        auto [amount, crit] = calcDamage(enemy, p); // Enemy uses the same damage formula as player.
+        if (hits == 2) amount = std::max(1, amount / 2); // Split two-hit attacks into smaller hits.
+        p.takeDamage(amount); // Apply enemy damage to player shield/HP.
         typeText(enemy.name + " hits for " + std::to_string(amount) + " damage." +
                  (crit ? " Critical!" : ""));
     }
@@ -791,6 +881,7 @@ void enemyTurn(Fighter& enemy, Player& p) {
 
 // ─────────────────────── BESTIARY ────────────────────────────────────────────
 void recordBestiary(RunState& state, const std::string& ename, bool killed = false) {
+    // Bestiary entries are created automatically the first time an enemy is seen.
     auto& entry = state.bestiary[ename];
     if (!killed) entry["seen"]++;
     else         entry["kills"]++;
@@ -798,6 +889,7 @@ void recordBestiary(RunState& state, const std::string& ename, bool killed = fal
 
 // ─────────────────────── EXP ─────────────────────────────────────────────────
 void gainExp(Player& p, int amount) {
+    // Multiple level-ups can happen if a large reward crosses more than one threshold.
     p.exp += amount;
     typeText("Gained " + std::to_string(amount) + " EXP.");
     while (p.exp >= p.next_exp) {
@@ -813,6 +905,13 @@ void gainExp(Player& p, int amount) {
 // ─────────────────────── COMBAT ──────────────────────────────────────────────
 std::string combat(Player& p, LearningEngine& engine, RunState& state,
                    int tier, bool elite = false, bool boss = false) {
+    /*
+        Full encounter loop:
+        1. Create and reveal the enemy.
+        2. Apply start-of-battle mastery bonuses.
+        3. Alternate player and enemy turns until someone falls or the player escapes.
+        4. Pay rewards and record bestiary progress on victory.
+    */
     Fighter enemy = enemyFor(tier, elite, boss);
     recordBestiary(state, enemy.name);
     clearScreen();
@@ -821,6 +920,7 @@ std::string combat(Player& p, LearningEngine& engine, RunState& state,
     flashMessage(enemy.name + " appears!", boss || elite ? 3 : 2);
 
     if (std::find(p.skills.begin(), p.skills.end(), "TF") != p.skills.end()) {
+        // Truth Guard is passive at battle start, unlike the active mastery menu use.
         p.shield += 5; typeText("[Truth Guard] Battle shield +5.");
     }
     if (std::find(p.skills.begin(), p.skills.end(), "FB") != p.skills.end()) {
@@ -830,6 +930,7 @@ std::string combat(Player& p, LearningEngine& engine, RunState& state,
     int phase = 1;
     while (p.alive() && enemy.alive()) {
         if (boss) {
+            // Boss phases make the final fight escalate as HP drops.
             double ratio = (double)enemy.hp / enemy.max_hp;
             if (phase == 1 && ratio <= 0.66) {
                 phase = 2; enemy.atk += 5;
@@ -849,11 +950,13 @@ std::string combat(Player& p, LearningEngine& engine, RunState& state,
         std::string result = playerTurn(p, enemy, engine, boss);
         if (result == "escape") { typeText("You escaped."); return "escaped"; }
         if (enemy.alive()) enemyTurn(enemy, p);
+        // Effects tick after both sides have acted for the round.
         tickEffects(enemy);
         tickEffects(p);
     }
 
     if (p.alive()) {
+        // Victory branch handles all post-combat rewards.
         typeText(enemy.name + " defeated.");
         recordBestiary(state, enemy.name, true);
         int reward_exp  = boss ? 150 : (elite ? 40 : 25);
@@ -868,6 +971,7 @@ std::string combat(Player& p, LearningEngine& engine, RunState& state,
         p.gold += gold;
         typeText("Gained " + std::to_string(gold) + " gold.");
         if (randReal() < 0.35) {
+            // Item drops are intentionally broad: any item in the table can drop.
             auto names = itemNames();
             std::string drop = randChoice(names);
             p.inventory.push_back(drop);
@@ -880,12 +984,13 @@ std::string combat(Player& p, LearningEngine& engine, RunState& state,
 
 // ─────────────────────── SHOP / TRIAL / REST ──────────────────────────────────
 void shop(Player& p) {
+    // Shop offers a random three-item stock each visit.
     divider("Shop");
-    auto names = itemNames();
-    std::shuffle(names.begin(), names.end(), rng());
+    auto names = itemNames(); // Start from every item name in the item table.
+    std::shuffle(names.begin(), names.end(), rng()); // Randomize shop stock order.
     std::vector<const Item*> stock;
     for (int i = 0; i < 3 && i < (int)names.size(); ++i)
-        stock.push_back(&ITEMS.at(names[i]));
+        stock.push_back(&ITEMS.at(names[i])); // Store pointers to the selected shop items.
 
     while (true) {
         std::cout << "\nGold: " << p.gold << "\n0. Leave\n";
@@ -896,10 +1001,10 @@ void shop(Player& p) {
         if (!choice.empty() && std::all_of(choice.begin(), choice.end(), ::isdigit)) {
             int n = std::stoi(choice);
             if (n >= 1 && n <= (int)stock.size()) {
-                const Item* item = stock[n-1];
+                const Item* item = stock[n-1]; // Convert menu number to chosen stock item.
                 if (p.gold >= item->price) {
-                    p.gold -= item->price;
-                    p.inventory.push_back(item->name);
+                    p.gold -= item->price; // Pay item cost.
+                    p.inventory.push_back(item->name); // Inventory stores item names, not Item objects.
                     typeText("Bought " + item->name + ".");
                 } else { typeText("Not enough gold."); }
                 continue;
@@ -910,25 +1015,27 @@ void shop(Player& p) {
 }
 
 void trial(Player& p, LearningEngine& engine) {
+    // A trial is a safe reward node: three questions, no enemy turns.
     divider("Knowledge Trial");
     typeText("Answer 3 questions. Correct answers give rewards.");
-    int correct = 0;
+    int correct = 0; // Counts how many of the three trial questions were answered correctly.
     for (int i = 0; i < 3; ++i) {
         auto [ok, _] = askQuestion(engine, p);
         if (ok) correct++;
     }
-    int ex = correct * 20, gld = correct * 10;
-    gainExp(p, ex);
-    p.gold += gld;
+    int ex = correct * 20, gld = correct * 10; // Rewards scale directly with correct answers.
+    gainExp(p, ex); // Trial EXP still uses normal level-up logic.
+    p.gold += gld;  // Add trial gold directly.
     typeText("Trial complete: +" + std::to_string(ex) + " EXP, +" + std::to_string(gld) + " gold.");
 }
 
 void rest(Player& p) {
-    int amount = std::max(10, p.max_hp / 3);
+    // Rest healing scales with max HP and gets better with ID mastery.
+    int amount = std::max(10, p.max_hp / 3); // Heal at least 10, or one third of max HP.
     if (std::find(p.skills.begin(), p.skills.end(), "ID") != p.skills.end())
-        amount += p.mastery.at("ID");
+        amount += p.mastery.at("ID"); // Identification mastery improves healing.
     animatedBar("Before rest", p.hp, p.max_hp);
-    p.heal(amount);
+    p.heal(amount); // Apply capped healing.
     sleepMs(250);
     animatedBar("After rest", p.hp, p.max_hp);
     typeText("You rest and recover " + std::to_string(amount) + " HP.");
@@ -936,12 +1043,14 @@ void rest(Player& p) {
 
 // ─────────────────────── ACHIEVEMENTS ────────────────────────────────────────
 void awardAchievement(RunState& s, const std::string& name) {
+    // Prevent duplicate achievements while keeping unlock order.
     if (std::find(s.achievements.begin(), s.achievements.end(), name) == s.achievements.end()) {
         s.achievements.push_back(name);
         typeText("*** Achievement unlocked: " + name + " ***");
     }
 }
 void checkAchievements(Player& p, RunState& s) {
+    // Called after meaningful progress so achievements unlock during the run.
     if (s.battles_won >= 1) awardAchievement(s, "First Victory");
     if (s.nodes >= 5)       awardAchievement(s, "Node Walker");
     if (s.elites_won >= 1)  awardAchievement(s, "Elite Breaker");
@@ -952,6 +1061,7 @@ void checkAchievements(Player& p, RunState& s) {
 
 // ─────────────────────── RANDOM EVENTS ───────────────────────────────────────
 void randomEvent(Player& p) {
+    // Only 20% of cleared nodes trigger an extra event.
     double roll = randReal();
     if (roll > 0.20) return;
     typeText("\nA small event interrupts the path...");
@@ -974,6 +1084,7 @@ void randomEvent(Player& p) {
 
 // ─────────────────────── VIEWS ───────────────────────────────────────────────
 void viewCharacter(Player& p) {
+    // Shows long-term player state outside combat.
     std::cout << "\n=== Character Sheet ===\n";
     std::cout << p.name << " the " << p.class_name << '\n';
     std::cout << "HP: " << bar(p.hp, p.max_hp) << "  Shield: " << p.shield << '\n';
@@ -998,6 +1109,7 @@ void viewCharacter(Player& p) {
 }
 
 void viewInventory(Player& p) {
+    // Non-combat inventory view allows only items that make sense outside combat.
     std::cout << "\n=== Inventory ===\n";
     if (p.inventory.empty()) { std::cout << "Inventory is empty.\n"; pause(); return; }
     std::cout << "0. Back\n";
@@ -1017,6 +1129,7 @@ void viewInventory(Player& p) {
 }
 
 void viewBestiary(RunState& s) {
+    // Shows enemies that were seen or defeated in this save/run.
     std::cout << "\n=== Bestiary ===\n";
     if (s.bestiary.empty()) std::cout << "No enemies recorded yet.\n";
     for (auto& [name, data] : s.bestiary)
@@ -1025,6 +1138,7 @@ void viewBestiary(RunState& s) {
 }
 
 void viewAchievements(RunState& s) {
+    // Compares saved achievements against the complete achievement catalog.
     std::cout << "\n=== Achievements ===\n";
     for (auto& [name, desc] : ACHIEVEMENTS) {
         bool unlocked = std::find(s.achievements.begin(), s.achievements.end(), name) != s.achievements.end();
@@ -1035,6 +1149,7 @@ void viewAchievements(RunState& s) {
 
 // ─────────────────────── MAP / NODE ──────────────────────────────────────────
 std::string drawMap(const RunState& s) {
+    // Shows only recent nodes so the console map stays compact.
     auto recent = s.journal;
     if ((int)recent.size() > 8) recent = std::vector<std::string>(recent.end() - 8, recent.end());
     std::string result;
@@ -1047,6 +1162,7 @@ std::string drawMap(const RunState& s) {
 }
 
 std::vector<std::string> makeNodes(const RunState& s) {
+    // Generate two or three possible next nodes, with boss unlocked late in tier 3.
     std::vector<std::string> types = {"battle","elite","shop","trial","rest"};
     if (s.tier >= 3 && s.nodes >= 10) types.push_back("boss");
     std::shuffle(types.begin(), types.end(), rng());
@@ -1056,6 +1172,7 @@ std::vector<std::string> makeNodes(const RunState& s) {
 }
 
 void quickStatus(const Player& p, const RunState& s) {
+    // Single-line summary printed above node choices.
     std::cout << p.name << " | HP " << p.hp << "/" << p.max_hp
               << " | Lv " << p.level << " | Gold " << p.gold
               << " | Tier " << s.tier << " Node " << s.nodes << '\n';
@@ -1065,6 +1182,14 @@ void quickStatus(const Player& p, const RunState& s) {
 // We use a hand-rolled key=value format to avoid external JSON deps.
 
 void saveGame(const Player& p, const RunState& s, bool quiet = false) {
+    /*
+        Save format:
+        - scalar fields are written as key=value lines;
+        - vector fields are comma-separated on one line;
+        - bestiary entries are repeated lines with name:seen:kills.
+
+        This is not full JSON despite the filename; it is a compact custom format.
+    */
     std::ofstream f(SAVE_FILE);
     if (!f) { typeText("Could not save."); return; }
     // Player
@@ -1124,6 +1249,7 @@ void saveGame(const Player& p, const RunState& s, bool quiet = false) {
 }
 
 std::vector<std::string> splitStr(const std::string& s, char delim) {
+    // Helper for reading comma-separated and colon-separated fields from the save file.
     std::vector<std::string> out;
     std::istringstream ss(s);
     std::string tok;
@@ -1132,28 +1258,30 @@ std::vector<std::string> splitStr(const std::string& s, char delim) {
 }
 
 bool loadGame(Player& p, RunState& s) {
+    // Rebuilds Player and RunState from the key=value save format used by saveGame.
     std::ifstream f(SAVE_FILE);
     if (!f) { typeText("No save file found."); return false; }
-    // Reset
+    // Reset to a valid baseline before applying saved fields.
     p = Player("Hero", 60, 10, 4, 5, 0.10);
     s = RunState();
     std::string line;
     while (std::getline(f, line)) {
         line = trim(line);
-        auto eq = line.find('=');
+        auto eq = line.find('='); // Save lines are split at the first equals sign.
+        // Ignore malformed lines instead of failing the whole load.
         if (eq == std::string::npos) continue;
-        std::string key = trim(line.substr(0, eq));
-        std::string val = trim(line.substr(eq + 1));
-        if (key == "name")         p.name = val;
+        std::string key = trim(line.substr(0, eq));     // Left side is the saved field name.
+        std::string val = trim(line.substr(eq + 1));    // Right side is the saved field value.
+        if (key == "name")         p.name = val;        // Text fields can be copied directly.
         else if (key == "class_name")   p.class_name = val;
         else if (key == "passive")      p.passive = val;
         else if (key == "run_modifier") p.run_modifier = val;
-        else if (key == "max_hp")   p.max_hp = std::stoi(val);
+        else if (key == "max_hp")   p.max_hp = std::stoi(val); // Numeric fields are converted from text.
         else if (key == "hp")       p.hp = std::stoi(val);
         else if (key == "atk")      p.atk = std::stoi(val);
         else if (key == "defense")  p.defense = std::stoi(val);
         else if (key == "spd")      p.spd = std::stoi(val);
-        else if (key == "crit")     p.crit = std::stod(val);
+        else if (key == "crit")     p.crit = std::stod(val); // Crit uses a decimal number.
         else if (key == "wisdom")   p.wisdom = std::stoi(val);
         else if (key == "level")    p.level = std::stoi(val);
         else if (key == "exp")      p.exp = std::stoi(val);
@@ -1166,13 +1294,13 @@ bool loadGame(Player& p, RunState& s) {
         else if (key == "total_answers")   p.total_answers = std::stoi(val);
         else if (key == "inventory") {
             p.inventory.clear();
-            if (!val.empty()) for (auto& s2 : splitStr(val, ',')) if (!s2.empty()) p.inventory.push_back(s2);
+            if (!val.empty()) for (auto& s2 : splitStr(val, ',')) if (!s2.empty()) p.inventory.push_back(s2); // Rebuild item-name list.
         } else if (key == "skills") {
             p.skills.clear();
-            if (!val.empty()) for (auto& s2 : splitStr(val, ',')) if (!s2.empty()) p.skills.push_back(s2);
+            if (!val.empty()) for (auto& s2 : splitStr(val, ',')) if (!s2.empty()) p.skills.push_back(s2); // Rebuild unlocked skill codes.
         } else if (key.substr(0, 8) == "mastery_") {
-            std::string qt = key.substr(8);
-            p.mastery[qt] = std::stoi(val);
+            std::string qt = key.substr(8); // Remove "mastery_" prefix to get the question type.
+            p.mastery[qt] = std::stoi(val); // Restore that question type's mastery count.
         } else if (key == "tier")         s.tier = std::stoi(val);
         else if (key == "nodes")          s.nodes = std::stoi(val);
         else if (key == "battles_won")    s.battles_won = std::stoi(val);
@@ -1197,6 +1325,7 @@ bool loadGame(Player& p, RunState& s) {
 
 // ─────────────────────── SETTINGS / HELP ─────────────────────────────────────
 void showHelp() {
+    // Central place for command reminders used from both title and node menus.
     std::cout << "\n=== Help / Controls ===\n"
               << "Title Menu: 1=new, 2=load, 3=practice, 4=achievements, 5=settings, 6=help, 7=exit.\n"
               << "Node Menu: choose a path number, or c=character, i=inventory,\n"
@@ -1207,6 +1336,7 @@ void showHelp() {
 }
 
 void setTextSpeed() {
+    // Settings mutate the global display controls used by all text helpers.
     const std::map<std::string, double> speeds = {
         {"instant",0.0},{"fast",0.005},{"normal",0.015},{"slow",0.035}
     };
@@ -1233,6 +1363,7 @@ void setTextSpeed() {
 
 // ─────────────────────── PRACTICE MODE ───────────────────────────────────────
 void practiceMode(LearningEngine& engine) {
+    // Practice reuses the same question code but a dummy player absorbs stat changes.
     divider("Practice Mode");
     typeText("Answer questions without combat pressure.");
     int correct = 0, total = 0;
@@ -1250,6 +1381,7 @@ void practiceMode(LearningEngine& engine) {
 
 // ─────────────────────── NEW PLAYER / MODIFIER ───────────────────────────────
 Player newPlayer() {
+    // Creates a Player from the chosen ClassBuild template.
     std::string name = askRaw("Character name: ");
     if (name.empty()) name = "Hero";
     std::cout << "\nChoose a class:\n";
@@ -1265,6 +1397,7 @@ Player newPlayer() {
 }
 
 void chooseRunModifier(Player& p) {
+    // Stores only the modifier key; specific mechanics check the key later.
     std::cout << "\nChoose a run modifier:\n";
     for (int i = 0; i < (int)RUN_MODIFIERS.size(); ++i)
         std::cout << (i+1) << ". " << RUN_MODIFIERS[i].label << " - " << RUN_MODIFIERS[i].desc << '\n';
@@ -1276,6 +1409,7 @@ void chooseRunModifier(Player& p) {
 
 // ─────────────────────── TITLE SCREEN ────────────────────────────────────────
 void showTitle() {
+    // Title redraw is called after returning from submenus.
     clearScreen();
     std::cout << TITLE_ART << '\n';
     typeText("        A C++ Educational RPG - Console Build", 0.01);
@@ -1284,6 +1418,7 @@ void showTitle() {
 }
 
 std::string titleMenu(LearningEngine& engine) {
+    // Returns the choice that should leave the title screen: new, load, or exit.
     while (true) {
         loading("Ready");
         std::cout << '\n';
@@ -1310,11 +1445,17 @@ std::string titleMenu(LearningEngine& engine) {
 
 // ─────────────────────── NODE LOOP ───────────────────────────────────────────
 std::string chooseNode(RunState& s, Player& p) {
+    /*
+        Node menu loop:
+        - generate the current choices;
+        - let the player inspect side screens or settings without advancing;
+        - return a node/action string once the player chooses progress, save, or quit.
+    */
     while (true) {
         auto nodes = makeNodes(s);
         divider("Tier " + std::to_string(s.tier) + " | Node " + std::to_string(s.nodes));
         quickStatus(p, s);
-        // animate map
+        // Animate the map one character at a time when animations are enabled.
         std::string mapStr = drawMap(s);
         std::cout << "Map: " << std::flush;
         for (char c : mapStr) {
@@ -1350,6 +1491,7 @@ std::string chooseNode(RunState& s, Player& p) {
 }
 
 bool runNode(Player& p, LearningEngine& engine, RunState& s, const std::string& node) {
+    // Executes the selected node and returns whether the run should continue.
     if (node == "save" || node == "quit") {
         saveGame(p, s);
         return node != "quit";
@@ -1388,10 +1530,12 @@ bool runNode(Player& p, LearningEngine& engine, RunState& s, const std::string& 
     s.nodes++;
     s.journal.push_back(node);
     if (s.nodes % 5 == 0) {
+        // Every five cleared nodes increases tier, up to tier 3.
         s.tier = std::min(3, s.tier + 1);
         typeText("\nTier increased to " + std::to_string(s.tier) + ".");
     }
     p.heal(std::max(1, p.max_hp / 20));
+    // Small automatic recovery and events keep the path from being only combat.
     randomEvent(p);
     checkAchievements(p, s);
     saveGame(p, s, true);
@@ -1400,6 +1544,7 @@ bool runNode(Player& p, LearningEngine& engine, RunState& s, const std::string& 
 
 // ─────────────────────── RUN SUMMARY ─────────────────────────────────────────
 void printRunSummary(const Player& p, const RunState& s, const LearningEngine& engine) {
+    // End-of-run summary includes learning stats and a short review list.
     std::cout << "\n=== Run Summary ===\n"
               << "Name: " << p.name << '\n'
               << "Level: " << p.level << '\n'
@@ -1428,37 +1573,41 @@ void printRunSummary(const Player& p, const RunState& s, const LearningEngine& e
 // ─────────────────────── MAIN ────────────────────────────────────────────────
 int main() {
 #ifdef _WIN32
+    // Allows Windows console to display UTF-8 title art and symbols correctly.
     SetConsoleOutputCP(CP_UTF8);
 #endif
-    showTitle();
-    LearningEngine engine;
-    engine.loadAll();
+    // Initialize the title screen and question database before the player chooses a mode.
+    showTitle(); // Draw opening title art and subtitle.
+    LearningEngine engine; // Holds all loaded questions and missed-question review data.
+    engine.loadAll(); // Read question files into memory.
 
-    std::string choice = titleMenu(engine);
-    if (choice == "7") return 0;
+    std::string choice = titleMenu(engine); // Ask whether to start, load, practice, or exit.
+    if (choice == "7") return 0; // Exit immediately when the player chooses Exit.
 
-    Player player;
-    RunState state;
-    bool loaded = false;
+    Player player; // Main player object for this run.
+    RunState state; // Main run progress object for this run.
+    bool loaded = false; // Tracks whether loadGame succeeded.
+    // Load existing save only for menu choice 2; otherwise start a fresh run.
     if (choice == "2") loaded = loadGame(player, state);
     if (loaded) {
         typeText("Save loaded.");
     } else {
-        player = newPlayer();
-        state  = RunState();
-        chooseRunModifier(player);
+        player = newPlayer(); // Build a new player from name and class selection.
+        state  = RunState();  // Fresh run starts from default tier/node values.
+        chooseRunModifier(player); // Optional rule modifier is stored on the player.
     }
 
-    bool alive = true;
-    bool savedAndQuit = false;
+    bool alive = true; // Controls whether the run loop should continue.
+    bool savedAndQuit = false; // Distinguishes quitting from death/victory summary.
     while (alive) {
-        std::string node = chooseNode(state, player);
-        alive = runNode(player, engine, state, node);
-        if (node == "quit") { savedAndQuit = true; break; }
-        if (node == "boss" && alive) break;
+        // Main run loop: choose a node, run it, and stop on death, quit, or boss victory.
+        std::string node = chooseNode(state, player); // Let player choose next path action.
+        alive = runNode(player, engine, state, node); // Execute the selected action.
+        if (node == "quit") { savedAndQuit = true; break; } // Stop cleanly after save-and-quit.
+        if (node == "boss" && alive) break; // Boss victory ends the run.
     }
 
-    if (savedAndQuit) typeText("Saved. See you next run.");
-    else printRunSummary(player, state, engine);
-    return 0;
+    if (savedAndQuit) typeText("Saved. See you next run."); // Quit message when player saved.
+    else printRunSummary(player, state, engine); // Death or victory shows final stats.
+    return 0; // Tell the operating system the program ended successfully.
 }
